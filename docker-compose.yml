@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8083:80"
+    depends_on:
+      - postgres
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: byte_forms
+      POSTGRES_USER: byte
+      POSTGRES_PASSWORD: byte_local_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
