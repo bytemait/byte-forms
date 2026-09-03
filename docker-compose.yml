@@ -4,14 +4,42 @@ services:
     ports:
       - "8083:80"
     depends_on:
-      - postgres
+      api:
+        condition: service_healthy
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://byte:${POSTGRES_PASSWORD:-byte_local_dev}@postgres:5432/byte_forms
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@byte.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-before-production}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: byte_forms
       POSTGRES_USER: byte
-      POSTGRES_PASSWORD: byte_local_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-byte_local_dev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U byte -d byte_forms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 volumes:
   postgres_data:
+  uploads_data:

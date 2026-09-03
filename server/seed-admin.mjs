@@ -1,0 +1,13 @@
+import pg from 'pg';
+import bcrypt from 'bcryptjs';
+const { Pool } = pg;
+const email = process.env.ADMIN_EMAIL;
+const password = process.env.ADMIN_PASSWORD;
+if (!email || !password) throw new Error('Set ADMIN_EMAIL and ADMIN_PASSWORD before seeding an admin.');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgres://byte:byte_local_dev@localhost:5432/byte_forms' });
+const hash = await bcrypt.hash(password, 12);
+await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+await pool.query('CREATE TABLE IF NOT EXISTS admin_users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text UNIQUE NOT NULL, password_hash text NOT NULL, active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), last_login_at timestamptz)');
+await pool.query('INSERT INTO admin_users(email,password_hash) VALUES($1,$2) ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash,active=true', [email.trim().toLowerCase(), hash]);
+await pool.end();
+console.log(`Admin ${email.trim().toLowerCase()} is ready.`);

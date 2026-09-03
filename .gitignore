@@ -1,3 +1,22 @@
-node_modules
-dist
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+
+# Environment and secrets
 .env
+.env.*
+!.env.example
+*.pem
+
+# Runtime data and uploads
+uploads/
+*.log
+
+# Test and tooling output
+coverage/
+.nyc_output/
+
+# OS/editor files
+.DS_Store
+*.swp
