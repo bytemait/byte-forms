@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { duplicateMemberMessage, memberCanEdit } from './member-access.mjs';
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,8 @@ CREATE TABLE IF NOT EXISTS submissions (
 );
 CREATE INDEX IF NOT EXISTS submissions_status_idx ON submissions(status);
 CREATE INDEX IF NOT EXISTS submissions_updated_idx ON submissions(updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS submissions_full_name_unique_idx ON submissions ((lower(regexp_replace(btrim(data->>'fullName'), '[[:space:]]+', ' ', 'g')))) WHERE nullif(btrim(data->>'fullName'), '') IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS submissions_enrollment_number_unique_idx ON submissions ((lower(regexp_replace(data->>'enrollmentNumber', '[[:space:]]+', '', 'g')))) WHERE nullif(btrim(data->>'enrollmentNumber'), '') IS NOT NULL;
 CREATE TABLE IF NOT EXISTS assets (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
  kind text NOT NULL CHECK(kind IN ('profile','project')), storage_key text NOT NULL, original_name text NOT NULL,
@@ -86,6 +89,10 @@ async function requireMember(req, res, next) {
   req.submission = submission;
   next();
 }
+function requireEditableMember(req, res, next) {
+  if (!memberCanEdit(req.submission.status)) return res.status(409).json({ error: { code: 'LOCKED', message: 'This profile is archived and can no longer be edited.' } });
+  next();
+}
 async function requireAdmin(req, res, next) {
   const raw = req.cookies.byte_admin_session;
   if (!raw) return res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Admin authentication required.' } });
@@ -108,8 +115,7 @@ app.post('/api/submissions', asyncHandler(async (req, res) => {
   res.status(201).json({ submission: result.rows[0], editToken: token });
 }));
 app.get('/api/submissions/:id', requireMember, (req, res) => res.json({ submission: req.submission }));
-app.patch('/api/submissions/:id', requireMember, asyncHandler(async (req, res) => {
-  if (req.submission.status !== 'draft' && req.submission.status !== 'changes_requested') return res.status(409).json({ error: { code: 'LOCKED', message: 'This submission can no longer be edited.' } });
+app.patch('/api/submissions/:id', requireMember, requireEditableMember, asyncHandler(async (req, res) => {
   if (!req.body || typeof req.body.data !== 'object' || Array.isArray(req.body.data)) return res.status(400).json({ error: { code: 'INVALID_DATA', message: 'A data object is required.' } });
   const result = await pool.query('UPDATE submissions SET data=$1,updated_at=now() WHERE id=$2 RETURNING id,reference_no,status,data,created_at,updated_at', [req.body.data, req.submission.id]);
   res.json({ submission: result.rows[0] });
@@ -126,7 +132,7 @@ app.post('/api/submissions/:id/submit', requireMember, asyncHandler(async (req, 
 
 const storage = multer.diskStorage({ destination: uploadDir, filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`) });
 const imageUpload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, cb) => cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) });
-app.post('/api/submissions/:id/assets', requireMember, imageUpload.single('file'), asyncHandler(async (req, res) => {
+app.post('/api/submissions/:id/assets', requireMember, requireEditableMember, imageUpload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: { code: 'INVALID_FILE', message: 'Upload a JPG, PNG, or WebP image under 5MB.' } });
   const kind = req.body.kind === 'project' ? 'project' : 'profile';
   const asset = await pool.query('INSERT INTO assets(submission_id,kind,storage_key,original_name,mime_type,byte_size) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,kind,original_name,mime_type,byte_size', [req.submission.id, kind, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size]);
@@ -163,7 +169,7 @@ app.get('/api/admin/submissions', requireAdmin, asyncHandler(async (req, res) =>
   const count = await pool.query(`SELECT count(*)::int AS count FROM submissions ${where}`, values);
   values.push(limit, offset);
   const rows = await pool.query(`SELECT id,reference_no,status,data,created_at,updated_at,submitted_at FROM submissions ${where} ORDER BY updated_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values);
-  res.json({ items: rows.rows.map(row => ({ ...row, name: row.data?.fullName || 'Unnamed member', department: row.data?.department || '—', year: row.data?.currentYear || '—' })), page, limit, total: count.rows[0].count });
+  res.json({ items: rows.rows.map(row => ({ ...row, name: row.data?.fullName || 'Incomplete draft', department: row.data?.department || '—', year: row.data?.currentYear || '—' })), page, limit, total: count.rows[0].count });
 }));
 app.get('/api/admin/submissions/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await pool.query('SELECT id,reference_no,status,data,created_at,updated_at,submitted_at,reviewed_at FROM submissions WHERE id=$1', [req.params.id]);
@@ -198,6 +204,6 @@ app.get('/api/admin/export.csv', requireAdmin, asyncHandler(async (req, res) => 
   res.type('text/csv').set('Content-Disposition', 'attachment; filename="byte-directory.csv"').send(csv);
 }));
 
-app.use((err, req, res, next) => { console.error(err); if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: { code: 'FILE_TOO_LARGE', message: 'Image must be 5MB or smaller.' } }); res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } }); });
+app.use((err, req, res, next) => { const duplicateMessage = err.code === '23505' && duplicateMemberMessage(err.constraint); if (duplicateMessage) return res.status(409).json({ error: { code: 'DUPLICATE_MEMBER', message: duplicateMessage } }); console.error(err); if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: { code: 'FILE_TOO_LARGE', message: 'Image must be 5MB or smaller.' } }); res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } }); });
 
 init().then(() => app.listen(port, () => console.log(`BYTE API listening on :${port}`))).catch(error => { console.error(error); process.exit(1); });

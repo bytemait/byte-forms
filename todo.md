@@ -6,10 +6,10 @@
 
 - [x] Confirm that normal members can open and submit the form without creating an account or signing in.
 - [x] Decide how an anonymous member can resume an unfinished draft. Recommended approach: create an opaque draft edit token, store it in the member's browser, and require it for every draft read/update request.
-- [ ] Decide whether a submitted profile can be edited by the member. If yes, define whether the same edit token remains valid or whether an admin must reopen the submission.
+- [x] Submitted profiles remain editable with the same member edit token until an admin archives them.
 - [x] Define submission statuses and allowed transitions. Recommended statuses: `draft`, `submitted`, `in_review`, `changes_requested`, `approved`, and `archived`.
 - [ ] Define which status transitions members can perform and which transitions are admin-only.
-- [ ] Decide whether duplicate submissions are allowed for the same college enrollment number.
+- [x] Duplicate member names and college enrollment numbers are not allowed.
 - [ ] Decide whether email is required for submission confirmation or draft recovery. If it is required, add it to the basic-information requirements.
 - [ ] Define data-retention rules for abandoned drafts, rejected uploads, archived submissions, admin sessions, and audit records.
 - [ ] Define which member fields are visible only to admins and which may eventually be published in a public directory.
@@ -34,7 +34,7 @@
 - [x] Create a `submissions` table with UUID, public reference number, status, hashed member edit token, submitted timestamp, reviewed timestamp, reviewer ID, created timestamp, and updated timestamp.
 - [ ] Add basic member fields to `submissions`: full name, enrollment number, current year, department/branch, BYTE roles, GitHub username, LinkedIn URL, X/Twitter handle, personal website, and quick highlights.
 - [ ] Add an email field if email is selected for confirmations or draft recovery.
-- [ ] Add a unique or partial-unique constraint for normalized enrollment number according to the duplicate-submission rule.
+- [x] Add partial unique indexes for normalized member names and enrollment numbers.
 - [ ] Create an `assets` table for profile photos and project cover images. Store submission ID, asset type, storage key, original filename, MIME type, byte size, image dimensions, checksum, and timestamps.
 - [ ] Create a `projects` table with submission ID, stable sort order, title, description, contributors, primary URL, and optional cover asset ID.
 - [ ] Create a `project_links` table with project ID, stable sort order, label, and URL.

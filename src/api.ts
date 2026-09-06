@@ -35,7 +35,7 @@ export async function adminLogin(email: string, password: string) {
 export async function adminLogout() { await fetch('/api/admin/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
 export async function adminMe() { return json<{ admin: { id: string; email: string } }>('/api/admin/auth/me'); }
 export async function adminStats() { return json<Record<string, number>>('/api/admin/stats'); }
-export async function adminSubmissions(query = '', status = '') { const params = new URLSearchParams({ q: query }); if (status) params.set('status', status); return json<{ items: any[]; total: number }>(`/api/admin/submissions?${params}`); }
+export async function adminSubmissions(query = '', status = '', page = 1) { const params = new URLSearchParams({ q: query, page: String(page) }); if (status) params.set('status', status); return json<{ items: any[]; total: number }>(`/api/admin/submissions?${params}`); }
 export async function adminSubmission(id: string) { return json<{ submission: any; notes: any[]; assets: any[] }>(`/api/admin/submissions/${id}`); }
 export async function adminSetStatus(id: string, status: string) { return json(`/api/admin/submissions/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); }
 export async function adminActivity() { return json<{ items: any[] }>('/api/admin/activity'); }

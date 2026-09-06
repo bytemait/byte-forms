@@ -61,7 +61,8 @@ Then select **Admin access** in the top-right corner. The API creates the first 
 ## Data and security notes
 
 - Member forms do not require normal-member accounts or login.
-- Draft edit tokens are hashed in PostgreSQL and kept in browser storage for draft recovery.
+- Member edit tokens are hashed in PostgreSQL and kept in browser storage so members can reopen and edit their profile until it is archived.
+- Normalized member names and enrollment numbers are unique, so one member cannot create duplicate profiles.
 - Admin passwords are bcrypt-hashed and admin sessions are server-side, revocable, and stored in HTTP-only cookies.
 - Do not use the Docker Compose fallback admin password in production. Provide `POSTGRES_PASSWORD`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` through deployment secrets.
 - Uploaded files are stored in the `uploads_data` volume locally. Configure an object-storage adapter before production deployment.
